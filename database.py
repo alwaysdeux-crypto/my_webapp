@@ -1,21 +1,21 @@
-import sqlite3
 import os
 from datetime import datetime, timedelta
+import psycopg2
+import psycopg2.extras
 
-DB_PATH = os.path.join('/tmp', 'todos.db') if os.environ.get('VERCEL') else os.path.join(os.path.dirname(__file__), 'todos.db')
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL, sslmode='require', cursor_factory=psycopg2.extras.RealDictCursor)
     return conn
 
 def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS todos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             title TEXT NOT NULL,
             description TEXT,
             category TEXT DEFAULT '업무',
@@ -26,11 +26,11 @@ def init_db():
         )
     ''')
     conn.commit()
-    
+
     # Check if empty, seed initial sample data
     cursor.execute('SELECT COUNT(*) as count FROM todos')
     count = cursor.fetchone()['count']
-    
+
     if count == 0:
         today = datetime.now()
         sample_todos = [
@@ -67,54 +67,54 @@ def init_db():
                 0
             )
         ]
-        
+
         cursor.executemany('''
             INSERT INTO todos (title, description, category, priority, due_date, completed)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
         ''', sample_todos)
         conn.commit()
-        
+
     conn.close()
 
 def get_all_todos(status='all', category='all', priority='all', search='', sort_by='due_date'):
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     query = 'SELECT * FROM todos WHERE 1=1'
     params = []
-    
+
     if status == 'active':
         query += ' AND completed = 0'
     elif status == 'completed':
         query += ' AND completed = 1'
-        
+
     if category != 'all' and category:
-        query += ' AND category = ?'
+        query += ' AND category = %s'
         params.append(category)
-        
+
     if priority != 'all' and priority:
-        query += ' AND priority = ?'
+        query += ' AND priority = %s'
         params.append(priority)
-        
+
     if search:
-        query += ' AND (title LIKE ? OR description LIKE ?)'
+        query += ' AND (title LIKE %s OR description LIKE %s)'
         search_param = f'%{search}%'
         params.extend([search_param, search_param])
-        
+
     if sort_by == 'due_date':
         query += ' ORDER BY completed ASC, due_date ASC, created_at DESC'
     elif sort_by == 'priority':
-        query += ''' ORDER BY completed ASC, 
-            CASE priority 
-                WHEN '긴급' THEN 1 
-                WHEN '높음' THEN 2 
-                WHEN '보통' THEN 3 
-                WHEN '낮음' THEN 4 
-                ELSE 5 
+        query += ''' ORDER BY completed ASC,
+            CASE priority
+                WHEN '긴급' THEN 1
+                WHEN '높음' THEN 2
+                WHEN '보통' THEN 3
+                WHEN '낮음' THEN 4
+                ELSE 5
             END ASC, created_at DESC'''
     else:
         query += ' ORDER BY completed ASC, created_at DESC'
-        
+
     cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
@@ -123,7 +123,7 @@ def get_all_todos(status='all', category='all', priority='all', search='', sort_
 def get_todo_by_id(todo_id):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM todos WHERE id = ?', (todo_id,))
+    cursor.execute('SELECT * FROM todos WHERE id = %s', (todo_id,))
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
@@ -133,10 +133,11 @@ def add_todo(title, description, category, priority, due_date):
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO todos (title, description, category, priority, due_date)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
+        RETURNING id
     ''', (title, description, category, priority, due_date))
+    todo_id = cursor.fetchone()['id']
     conn.commit()
-    todo_id = cursor.lastrowid
     conn.close()
     return get_todo_by_id(todo_id)
 
@@ -145,8 +146,8 @@ def update_todo(todo_id, title, description, category, priority, due_date, compl
     cursor = conn.cursor()
     cursor.execute('''
         UPDATE todos
-        SET title = ?, description = ?, category = ?, priority = ?, due_date = ?, completed = ?
-        WHERE id = ?
+        SET title = %s, description = %s, category = %s, priority = %s, due_date = %s, completed = %s
+        WHERE id = %s
     ''', (title, description, category, priority, due_date, completed, todo_id))
     conn.commit()
     conn.close()
@@ -155,14 +156,14 @@ def update_todo(todo_id, title, description, category, priority, due_date, compl
 def toggle_todo(todo_id):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT completed FROM todos WHERE id = ?', (todo_id,))
+    cursor.execute('SELECT completed FROM todos WHERE id = %s', (todo_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
         return None
-    
+
     new_status = 1 if row['completed'] == 0 else 0
-    cursor.execute('UPDATE todos SET completed = ? WHERE id = ?', (new_status, todo_id))
+    cursor.execute('UPDATE todos SET completed = %s WHERE id = %s', (new_status, todo_id))
     conn.commit()
     conn.close()
     return get_todo_by_id(todo_id)
@@ -170,7 +171,7 @@ def toggle_todo(todo_id):
 def delete_todo(todo_id):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM todos WHERE id = ?', (todo_id,))
+    cursor.execute('DELETE FROM todos WHERE id = %s', (todo_id,))
     rows_affected = cursor.rowcount
     conn.commit()
     conn.close()
@@ -179,28 +180,28 @@ def delete_todo(todo_id):
 def get_stats():
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     cursor.execute('SELECT COUNT(*) as total FROM todos')
     total = cursor.fetchone()['total']
-    
+
     cursor.execute('SELECT COUNT(*) as completed FROM todos WHERE completed = 1')
     completed = cursor.fetchone()['completed']
-    
+
     pending = total - completed
     rate = round((completed / total * 100), 1) if total > 0 else 0
-    
+
     # Priority breakdown
     cursor.execute('''
-        SELECT priority, COUNT(*) as count 
-        FROM todos 
-        WHERE completed = 0 
+        SELECT priority, COUNT(*) as count
+        FROM todos
+        WHERE completed = 0
         GROUP BY priority
     ''')
     priority_rows = cursor.fetchall()
     priorities = {row['priority']: row['count'] for row in priority_rows}
-    
+
     conn.close()
-    
+
     return {
         'total': total,
         'completed': completed,
