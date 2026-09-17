@@ -1,67 +1,30 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // State management
     let state = {
-        status: 'all',
-        category: 'all',
-        priority: 'all',
         search: '',
-        sortBy: 'due_date',
-        todos: []
+        profiles: []
     };
 
-    // DOM Elements
-    const todoListContainer = document.getElementById('todo-list');
+    const listContainer = document.getElementById('profile-list');
     const statTotalEl = document.getElementById('stat-total');
-    const statPendingEl = document.getElementById('stat-pending');
-    const statCompletedEl = document.getElementById('stat-completed');
-    const statRateTextEl = document.getElementById('stat-rate-text');
-    const statRateBarEl = document.getElementById('stat-rate-bar');
-    const currentDateTextEl = document.getElementById('current-date-text');
+    const statMaleEl = document.getElementById('stat-male');
+    const statFemaleEl = document.getElementById('stat-female');
 
-    // Controls
-    const statusTabs = document.getElementById('status-tabs');
     const searchInput = document.getElementById('search-input');
-    const filterCategorySelect = document.getElementById('filter-category');
-    const filterPrioritySelect = document.getElementById('filter-priority');
-    const sortBySelect = document.getElementById('sort-by');
 
-    // Modal & Form
-    const modal = document.getElementById('todo-modal');
+    const modal = document.getElementById('profile-modal');
     const btnOpenCreateModal = document.getElementById('btn-open-create-modal');
     const btnCloseModal = document.getElementById('btn-close-modal');
     const btnCancelModal = document.getElementById('btn-cancel-modal');
-    const todoForm = document.getElementById('todo-form');
-    const formTodoId = document.getElementById('form-todo-id');
-    const formTitle = document.getElementById('form-title');
-    const formDescription = document.getElementById('form-description');
-    const formCategory = document.getElementById('form-category');
-    const formPriority = document.getElementById('form-priority');
-    const formDueDate = document.getElementById('form-due-date');
+    const profileForm = document.getElementById('profile-form');
+    const formProfileId = document.getElementById('form-profile-id');
+    const formName = document.getElementById('form-name');
+    const formGender = document.getElementById('form-gender');
+    const formBirthDate = document.getElementById('form-birth-date');
+    const formBirthTime = document.getElementById('form-birth-time');
+    const formMemo = document.getElementById('form-memo');
     const modalTitle = document.getElementById('modal-title');
 
-    // Display formatted today date
-    const today = new Date();
-    const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
-    if (currentDateTextEl) {
-        currentDateTextEl.textContent = today.toLocaleDateString('ko-KR', options);
-    }
-
-    // Initialize Data
     loadData();
-
-    // Event Listeners for Filters
-    if (statusTabs) {
-        statusTabs.addEventListener('click', (e) => {
-            const btn = e.target.closest('.tab-btn');
-            if (!btn) return;
-            
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            
-            state.status = btn.dataset.status;
-            loadTodos();
-        });
-    }
 
     if (searchInput) {
         let timer;
@@ -69,33 +32,11 @@ document.addEventListener('DOMContentLoaded', () => {
             clearTimeout(timer);
             timer = setTimeout(() => {
                 state.search = e.target.value.trim();
-                loadTodos();
+                loadProfiles();
             }, 300);
         });
     }
 
-    if (filterCategorySelect) {
-        filterCategorySelect.addEventListener('change', (e) => {
-            state.category = e.target.value;
-            loadTodos();
-        });
-    }
-
-    if (filterPrioritySelect) {
-        filterPrioritySelect.addEventListener('change', (e) => {
-            state.priority = e.target.value;
-            loadTodos();
-        });
-    }
-
-    if (sortBySelect) {
-        sortBySelect.addEventListener('change', (e) => {
-            state.sortBy = e.target.value;
-            loadTodos();
-        });
-    }
-
-    // Modal Open / Close
     btnOpenCreateModal.addEventListener('click', () => openModal());
     btnCloseModal.addEventListener('click', closeModal);
     btnCancelModal.addEventListener('click', closeModal);
@@ -103,36 +44,37 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === modal) closeModal();
     });
 
-    // Form Submit (Create or Update)
-    todoForm.addEventListener('submit', async (e) => {
+    profileForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
-        const id = formTodoId.value;
+
+        const id = formProfileId.value;
         const payload = {
-            title: formTitle.value.trim(),
-            description: formDescription.value.trim(),
-            category: formCategory.value,
-            priority: formPriority.value,
-            due_date: formDueDate.value
+            name: formName.value.trim(),
+            gender: formGender.value,
+            birth_date: formBirthDate.value,
+            birth_time: formBirthTime.value,
+            memo: formMemo.value.trim()
         };
 
-        if (!payload.title) {
-            showToast('할일 제목을 입력해주세요.', 'error');
+        if (!payload.name) {
+            showToast('이름을 입력해주세요.', 'error');
+            return;
+        }
+        if (!payload.birth_date) {
+            showToast('생년월일을 입력해주세요.', 'error');
             return;
         }
 
         try {
             let response;
             if (id) {
-                // Update
-                response = await fetch(`/api/todos/${id}`, {
+                response = await fetch(`/api/profiles/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
             } else {
-                // Create
-                response = await fetch('/api/todos', {
+                response = await fetch('/api/profiles', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -144,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errData.error || '저장에 실패했습니다.');
             }
 
-            showToast(id ? '할일이 수정되었습니다 ✨' : '새 할일이 추가되었습니다 🎉', 'success');
+            showToast(id ? '사주 정보가 수정되었습니다 ✨' : '새 사주가 등록되었습니다 🎉', 'success');
             closeModal();
             loadData();
         } catch (err) {
@@ -152,97 +94,87 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Main Data Loading Function
     async function loadData() {
-        await Promise.all([loadTodos(), loadStats()]);
+        await Promise.all([loadProfiles(), loadStats()]);
     }
 
-    // Fetch Todos API
-    async function loadTodos() {
+    async function loadProfiles() {
         try {
-            const params = new URLSearchParams({
-                status: state.status,
-                category: state.category,
-                priority: state.priority,
-                search: state.search,
-                sort_by: state.sortBy
-            });
-
-            const response = await fetch(`/api/todos?${params.toString()}`);
+            const params = new URLSearchParams({ search: state.search });
+            const response = await fetch(`/api/profiles?${params.toString()}`);
             if (!response.ok) throw new Error('데이터 전송 오류');
-            
+
             const data = await response.json();
-            state.todos = data;
-            renderTodoList(data);
+            state.profiles = data;
+            renderProfileList(data);
         } catch (err) {
-            todoListContainer.innerHTML = `
+            listContainer.innerHTML = `
                 <div class="empty-state">
                     <i class="fa-solid fa-triangle-exclamation"></i>
-                    <p>할일 목록을 불러오지 못했습니다.</p>
+                    <p>프로필 목록을 불러오지 못했습니다.</p>
                 </div>
             `;
         }
     }
 
-    // Fetch Stats API
     async function loadStats() {
         try {
             const response = await fetch('/api/stats');
             if (!response.ok) return;
-            
+
             const stats = await response.json();
             statTotalEl.textContent = stats.total;
-            statPendingEl.textContent = stats.pending;
-            statCompletedEl.textContent = stats.completed;
-            statRateTextEl.textContent = `${stats.rate}%`;
-            statRateBarEl.style.width = `${stats.rate}%`;
+            statMaleEl.textContent = stats.male;
+            statFemaleEl.textContent = stats.female;
         } catch (err) {
             console.error('Stats error:', err);
         }
     }
 
-    // Render Todo Cards
-    function renderTodoList(todos) {
-        if (!todos || todos.length === 0) {
-            todoListContainer.innerHTML = `
+    const ELEMENT_ORDER = ['목', '화', '토', '금', '수'];
+    const ELEMENT_LABEL = { 목: '목(木)', 화: '화(火)', 토: '토(土)', 금: '금(金)', 수: '수(水)' };
+
+    function renderProfileList(profiles) {
+        if (!profiles || profiles.length === 0) {
+            listContainer.innerHTML = `
                 <div class="empty-state glass-card">
                     <i class="fa-solid fa-folder-open"></i>
-                    <p>조건에 일치하는 할일이 없습니다.</p>
+                    <p>등록된 사주 프로필이 없습니다.</p>
                 </div>
             `;
             return;
         }
 
-        todoListContainer.innerHTML = todos.map(todo => {
-            const isCompleted = todo.completed === 1;
-            const priorityBadge = getPriorityBadgeHtml(todo.priority);
-            const dueDateFormatted = todo.due_date ? `📅 ${todo.due_date}` : '';
-            
+        listContainer.innerHTML = profiles.map(profile => {
+            const genderClass = profile.gender === '여' ? 'female' : 'male';
+            const genderIcon = profile.gender === '여' ? 'fa-venus' : 'fa-mars';
+            const birthText = profile.birth_time
+                ? `${profile.birth_date} ${profile.birth_time}`
+                : `${profile.birth_date} (시간 미상)`;
+
             return `
-                <div class="todo-card glass-card ${isCompleted ? 'completed-card' : ''}" data-id="${todo.id}">
-                    <div class="checkbox-wrapper">
-                        <input type="checkbox" class="todo-checkbox" ${isCompleted ? 'checked' : ''} data-id="${todo.id}">
-                    </div>
-                    
-                    <div class="todo-content">
-                        <div class="todo-title">${escapeHtml(todo.title)}</div>
-                        ${todo.description ? `<div class="todo-desc">${escapeHtml(todo.description)}</div>` : ''}
-                        
-                        <div class="todo-meta">
-                            ${priorityBadge}
-                            <span class="badge badge-category"><i class="fa-solid fa-tag"></i> ${escapeHtml(todo.category)}</span>
-                            ${dueDateFormatted ? `<span class="due-date-text">${dueDateFormatted}</span>` : ''}
+                <div class="profile-card glass-card" data-id="${profile.id}">
+                    <div class="profile-card-header">
+                        <div class="profile-identity">
+                            <div class="gender-icon ${genderClass}"><i class="fa-solid ${genderIcon}"></i></div>
+                            <div>
+                                <div class="profile-name">${escapeHtml(profile.name)}</div>
+                                <div class="profile-birth-text"><i class="fa-solid fa-cake-candles"></i> ${birthText}</div>
+                            </div>
+                        </div>
+                        <div class="profile-actions">
+                            <button class="btn-icon btn-icon-edit" data-id="${profile.id}" title="수정">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button class="btn-icon btn-icon-delete" data-id="${profile.id}" title="삭제">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
                         </div>
                     </div>
 
-                    <div class="todo-actions">
-                        <button class="btn-icon btn-icon-edit" data-id="${todo.id}" title="수정">
-                            <i class="fa-solid fa-pen"></i>
-                        </button>
-                        <button class="btn-icon btn-icon-delete" data-id="${todo.id}" title="삭제">
-                            <i class="fa-solid fa-trash-can"></i>
-                        </button>
-                    </div>
+                    ${renderPillarsTable(profile.pillars)}
+                    ${renderElementsBar(profile.elements)}
+                    ${profile.memo ? `<div class="profile-memo">${escapeHtml(profile.memo)}</div>` : ''}
                 </div>
             `;
         }).join('');
@@ -250,42 +182,78 @@ document.addEventListener('DOMContentLoaded', () => {
         attachCardEvents();
     }
 
-    // Event Delegation for Todo Cards
-    function attachCardEvents() {
-        // Toggle Completed
-        document.querySelectorAll('.todo-checkbox').forEach(cb => {
-            cb.addEventListener('change', async (e) => {
-                const id = e.target.dataset.id;
-                try {
-                    const res = await fetch(`/api/todos/${id}/toggle`, { method: 'PATCH' });
-                    if (!res.ok) throw new Error('상태 변경 실패');
-                    loadData();
-                } catch (err) {
-                    showToast(err.message, 'error');
-                }
-            });
-        });
+    function renderPillarsTable(pillars) {
+        const cols = [
+            { label: '년주', p: pillars.year },
+            { label: '월주', p: pillars.month },
+            { label: '일주', p: pillars.day },
+            { label: '시주', p: pillars.hour },
+        ];
 
-        // Edit
+        return `
+            <div class="pillars-table">
+                ${cols.map(c => {
+                    if (!c.p) {
+                        return `
+                            <div class="pillar-col empty">
+                                <div class="pillar-label">${c.label}</div>
+                                <div class="pillar-hanja">-</div>
+                                <div class="pillar-hangul">시간 미상</div>
+                            </div>
+                        `;
+                    }
+                    return `
+                        <div class="pillar-col">
+                            <div class="pillar-label">${c.label}</div>
+                            <div class="pillar-hanja">
+                                <span class="ch-stem el-${c.p.stem_element}">${c.p.stem_hanja}</span>
+                                <span class="ch-branch el-${c.p.branch_element}">${c.p.branch_hanja}</span>
+                            </div>
+                            <div class="pillar-hangul">${c.p.ganzhi}</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    function renderElementsBar(elements) {
+        const total = ELEMENT_ORDER.reduce((sum, el) => sum + (elements[el] || 0), 0) || 1;
+        const segs = ELEMENT_ORDER.map(el => {
+            const count = elements[el] || 0;
+            const pct = (count / total) * 100;
+            return `<div class="elements-bar-seg bg-el-${el}" style="width:${pct}%"></div>`;
+        }).join('');
+
+        const legend = ELEMENT_ORDER.map(el => `
+            <span><span class="legend-dot bg-el-${el}"></span>${ELEMENT_LABEL[el]} ${elements[el] || 0}</span>
+        `).join('');
+
+        return `
+            <div class="elements-bar">${segs}</div>
+            <div class="elements-legend">${legend}</div>
+        `;
+    }
+
+    function attachCardEvents() {
         document.querySelectorAll('.btn-icon-edit').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const id = e.currentTarget.dataset.id;
-                const todo = state.todos.find(t => t.id == id);
-                if (todo) openModal(todo);
+                const profile = state.profiles.find(p => p.id == id);
+                if (profile) openModal(profile);
             });
         });
 
-        // Delete
         document.querySelectorAll('.btn-icon-delete').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const id = e.currentTarget.dataset.id;
-                if (!confirm('정말 이 할일을 삭제하시겠습니까?')) return;
+                if (!confirm('정말 이 프로필을 삭제하시겠습니까?')) return;
 
                 try {
-                    const res = await fetch(`/api/todos/${id}`, { method: 'DELETE' });
+                    const res = await fetch(`/api/profiles/${id}`, { method: 'DELETE' });
                     if (!res.ok) throw new Error('삭제 실패');
-                    
-                    showToast('할일이 삭제되었습니다.', 'info');
+
+                    showToast('프로필이 삭제되었습니다.', 'info');
                     loadData();
                 } catch (err) {
                     showToast(err.message, 'error');
@@ -294,42 +262,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Modal Helpers
-    function openModal(todo = null) {
-        todoForm.reset();
-        if (todo) {
-            modalTitle.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> 할일 수정';
-            formTodoId.value = todo.id;
-            formTitle.value = todo.title || '';
-            formDescription.value = todo.description || '';
-            formCategory.value = todo.category || '업무';
-            formPriority.value = todo.priority || '보통';
-            formDueDate.value = todo.due_date || '';
+    function openModal(profile = null) {
+        profileForm.reset();
+        if (profile) {
+            modalTitle.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> 사주 정보 수정';
+            formProfileId.value = profile.id;
+            formName.value = profile.name || '';
+            formGender.value = profile.gender || '남';
+            formBirthDate.value = profile.birth_date || '';
+            formBirthTime.value = profile.birth_time || '';
+            formMemo.value = profile.memo || '';
         } else {
-            modalTitle.innerHTML = '<i class="fa-solid fa-plus-circle"></i> 새 할일 등록';
-            formTodoId.value = '';
-            // Default due date to tomorrow
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            formDueDate.value = tomorrow.toISOString().split('T')[0];
+            modalTitle.innerHTML = '<i class="fa-solid fa-plus-circle"></i> 새 사주 등록';
+            formProfileId.value = '';
         }
         modal.classList.add('active');
-        formTitle.focus();
+        formName.focus();
     }
 
     function closeModal() {
         modal.classList.remove('active');
-    }
-
-    // Utility Functions
-    function getPriorityBadgeHtml(priority) {
-        switch (priority) {
-            case '긴급': return '<span class="badge badge-urgent">🚨 긴급</span>';
-            case '높음': return '<span class="badge badge-high">🔥 높음</span>';
-            case '보통': return '<span class="badge badge-medium">⚡ 보통</span>';
-            case '낮음': return '<span class="badge badge-low">☕ 낮음</span>';
-            default: return `<span class="badge badge-medium">${escapeHtml(priority)}</span>`;
-        }
     }
 
     function escapeHtml(str) {
@@ -347,9 +299,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
-        
+
         let iconHtml = '<i class="fa-solid fa-circle-info"></i>';
-        if (type === 'success') iconHtml = '<i class="fa-solid fa-circle-check" style="color:#34d399"></i>';
+        if (type === 'success') iconHtml = '<i class="fa-solid fa-circle-check" style="color:#4ade80"></i>';
         if (type === 'error') iconHtml = '<i class="fa-solid fa-circle-exclamation" style="color:#f87171"></i>';
 
         toast.innerHTML = `${iconHtml} <span>${escapeHtml(message)}</span>`;

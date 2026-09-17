@@ -1,11 +1,10 @@
-import os
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 import database
+import saju
 
 app = Flask(__name__)
 
-# Initialize SQLite database schema & sample data
 database.init_db()
 
 @app.route('/')
@@ -16,86 +15,87 @@ def index():
 def health_check():
     return jsonify({
         'status': 'ok',
-        'app': 'Flask To-Do Application',
+        'app': '사주관리앱',
         'time': datetime.now().isoformat()
     })
 
-@app.route('/api/todos', methods=['GET'])
-def list_todos():
-    status = request.args.get('status', 'all')
-    category = request.args.get('category', 'all')
-    priority = request.args.get('priority', 'all')
+def _with_saju(profile):
+    pillars, elements = saju.calculate_saju(profile['birth_date'], profile.get('birth_time'))
+    profile['pillars'] = pillars
+    profile['elements'] = elements
+    return profile
+
+@app.route('/api/profiles', methods=['GET'])
+def list_profiles():
     search = request.args.get('search', '')
-    sort_by = request.args.get('sort_by', 'due_date')
-    
-    todos = database.get_all_todos(
-        status=status,
-        category=category,
-        priority=priority,
-        search=search,
-        sort_by=sort_by
-    )
-    return jsonify(todos)
+    profiles = database.get_all_profiles(search=search)
+    return jsonify([_with_saju(p) for p in profiles])
 
-@app.route('/api/todos', methods=['POST'])
-def create_todo():
+@app.route('/api/profiles', methods=['POST'])
+def create_profile():
     data = request.get_json() or {}
-    title = data.get('title', '').strip()
-    
-    if not title:
-        return jsonify({'error': '제목은 필수 입력 사항입니다.'}), 400
-        
-    description = data.get('description', '').strip()
-    category = data.get('category', '업무').strip()
-    priority = data.get('priority', '보통').strip()
-    due_date = data.get('due_date', '').strip() or None
-    
-    new_todo = database.add_todo(title, description, category, priority, due_date)
-    return jsonify(new_todo), 201
+    name = data.get('name', '').strip()
+    birth_date = data.get('birth_date', '').strip()
 
-@app.route('/api/todos/<int:todo_id>', methods=['GET'])
-def get_todo(todo_id):
-    todo = database.get_todo_by_id(todo_id)
-    if not todo:
-        return jsonify({'error': '해당 할일을 찾을 수 없습니다.'}), 404
-    return jsonify(todo)
+    if not name:
+        return jsonify({'error': '이름은 필수 입력 사항입니다.'}), 400
+    if not birth_date:
+        return jsonify({'error': '생년월일은 필수 입력 사항입니다.'}), 400
 
-@app.route('/api/todos/<int:todo_id>', methods=['PUT'])
-def update_todo(todo_id):
+    gender = data.get('gender', '남').strip()
+    birth_time = data.get('birth_time', '').strip() or None
+    memo = data.get('memo', '').strip()
+
+    try:
+        saju.calculate_saju(birth_date, birth_time)
+    except Exception:
+        return jsonify({'error': '생년월일/시간 형식이 올바르지 않습니다.'}), 400
+
+    new_profile = database.add_profile(name, gender, birth_date, birth_time, memo)
+    return jsonify(_with_saju(new_profile)), 201
+
+@app.route('/api/profiles/<int:profile_id>', methods=['GET'])
+def get_profile(profile_id):
+    profile = database.get_profile_by_id(profile_id)
+    if not profile:
+        return jsonify({'error': '해당 프로필을 찾을 수 없습니다.'}), 404
+    return jsonify(_with_saju(profile))
+
+@app.route('/api/profiles/<int:profile_id>', methods=['PUT'])
+def update_profile(profile_id):
     data = request.get_json() or {}
-    title = data.get('title', '').strip()
-    if not title:
-        return jsonify({'error': '제목은 필수 입력 사항입니다.'}), 400
-        
-    description = data.get('description', '').strip()
-    category = data.get('category', '업무').strip()
-    priority = data.get('priority', '보통').strip()
-    due_date = data.get('due_date', '').strip() or None
-    completed = 1 if data.get('completed') else 0
-    
-    updated = database.update_todo(todo_id, title, description, category, priority, due_date, completed)
+    name = data.get('name', '').strip()
+    birth_date = data.get('birth_date', '').strip()
+
+    if not name:
+        return jsonify({'error': '이름은 필수 입력 사항입니다.'}), 400
+    if not birth_date:
+        return jsonify({'error': '생년월일은 필수 입력 사항입니다.'}), 400
+
+    gender = data.get('gender', '남').strip()
+    birth_time = data.get('birth_time', '').strip() or None
+    memo = data.get('memo', '').strip()
+
+    try:
+        saju.calculate_saju(birth_date, birth_time)
+    except Exception:
+        return jsonify({'error': '생년월일/시간 형식이 올바르지 않습니다.'}), 400
+
+    updated = database.update_profile(profile_id, name, gender, birth_date, birth_time, memo)
     if not updated:
-        return jsonify({'error': '해당 할일을 찾을 수 없습니다.'}), 404
-    return jsonify(updated)
+        return jsonify({'error': '해당 프로필을 찾을 수 없습니다.'}), 404
+    return jsonify(_with_saju(updated))
 
-@app.route('/api/todos/<int:todo_id>/toggle', methods=['PATCH'])
-def toggle_todo_status(todo_id):
-    toggled = database.toggle_todo(todo_id)
-    if not toggled:
-        return jsonify({'error': '해당 할일을 찾을 수 없습니다.'}), 404
-    return jsonify(toggled)
-
-@app.route('/api/todos/<int:todo_id>', methods=['DELETE'])
-def delete_todo(todo_id):
-    success = database.delete_todo(todo_id)
+@app.route('/api/profiles/<int:profile_id>', methods=['DELETE'])
+def delete_profile(profile_id):
+    success = database.delete_profile(profile_id)
     if not success:
-        return jsonify({'error': '해당 할일을 찾을 수 없습니다.'}), 404
-    return jsonify({'success': True, 'id': todo_id})
+        return jsonify({'error': '해당 프로필을 찾을 수 없습니다.'}), 404
+    return jsonify({'success': True, 'id': profile_id})
 
 @app.route('/api/stats', methods=['GET'])
 def stats():
     return jsonify(database.get_stats())
 
 if __name__ == '__main__':
-    # Listen on localhost port 5000
     app.run(host='127.0.0.1', port=5000, debug=True)
